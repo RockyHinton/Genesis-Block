@@ -44,9 +44,14 @@ class Blockchain:
     def get_latest_block(self):
         return self.chain[-1]
 
-    def add_transaction(self, sender, receiver, amount):
-        transaction = Transaction(sender, receiver, amount)
-        self.pending_transactions.append(transaction)
+    def add_transaction(self, sender, receiver, amount, signature=None, public_key=None):
+        transaction = Transaction(sender, receiver, amount, signature, public_key)
+        if transaction.is_valid():
+            self.pending_transactions.append(transaction)
+            print("Transaction added")
+        else:
+            print("❌ Invalid transaction. Not added.")
+
 
 
     def mine_pending_transactions(self, miner_address):
@@ -137,48 +142,58 @@ class Transaction:
 
 
 
-# Create a new blockchain
-my_chain = Blockchain()
-
-# Add some transactions
-my_chain.add_transaction("Alice", "Bob", 50)
-my_chain.add_transaction("Bob", "Charlie", 30)
-
-# Mine the transactions (mine a new block)
-my_chain.mine_pending_transactions("Miner1")
-
-# Add more transactions and mine another block
-my_chain.add_transaction("Charlie", "Alice", 10)
-my_chain.mine_pending_transactions("Miner2")
-
-# Print the blockchain
-for block in my_chain.chain:
-    print(f"Block #{block.index}:")
-    for tx in block.transactions:
-        print(tx)
-    print("Hash:", block.hash)
-    print("-----")
-
-
-
-
-# Generate keys
+# Step 1: Generate ECDSA key pair for sender
 private_key = ecdsa.SigningKey.generate(curve=ecdsa.SECP256k1)
 public_key = private_key.get_verifying_key()
+sender_address = public_key.to_string().hex()
 
-# Create and sign transaction
-sender = public_key.to_string().hex()
-tx = Transaction(sender, "receiver_placeholder", 100)
-tx.sign_transaction(private_key)
+# Step 2: Create and sign a valid transaction
+receiver_address = "receiver1234567890abcdef"  # Example placeholder
+amount = 100
 
-# Print results
-print("Signature (hex):", tx.signature)
+valid_tx = Transaction(sender_address, receiver_address, amount)
+valid_tx.sign_transaction(private_key)
 
-# Verify
-if tx.is_valid():
-    print("✅ Signature is valid.")
-else:
-    print("❌ Signature is invalid.")
+# Step 3: Create an invalid transaction (wrong signature)
+invalid_tx = Transaction(sender_address, receiver_address, amount)
+# Manually tamper with data or assign a bad signature
+invalid_tx.signature = "deadbeef" * 16  # clearly invalid hex signature
+
+# Step 4: Initialize blockchain
+chain = Blockchain()
+
+# Step 5: Add valid transaction
+print("Adding VALID transaction...")
+chain.add_transaction(
+    valid_tx.sender,
+    valid_tx.receiver,
+    valid_tx.amount,
+    valid_tx.signature,
+    valid_tx.public_key
+)
+
+# Step 6: Add invalid transaction
+print("Adding INVALID transaction...")
+chain.add_transaction(
+    invalid_tx.sender,
+    invalid_tx.receiver,
+    invalid_tx.amount,
+    invalid_tx.signature,
+    invalid_tx.public_key
+)
+
+# Step 7: Mine block
+print("\nMining block...")
+chain.mine_pending_transactions("miner_address_123")
+
+# Step 8: Print chain content
+print("\nBlockchain contents:")
+for block in chain.chain:
+    print(f"Block #{block.index} @ {block.timestamp}")
+    for tx in block.transactions:
+        print(f"  {tx}")
+    print(f"Hash: {block.hash}")
+    print("-----")
 
 
 
