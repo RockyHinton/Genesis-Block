@@ -44,8 +44,8 @@ class Blockchain:
     def get_latest_block(self):
         return self.chain[-1]
 
-    def add_transaction(self, sender, receiver, amount, signature=None, public_key=None):
-        transaction = Transaction(sender, receiver, amount, signature, public_key)
+    def add_transaction(self, sender, receiver, amount, fee=0, signature=None, public_key=None):
+        transaction = Transaction(sender, receiver, amount, fee, signature, public_key)
         if transaction.is_valid():
             self.pending_transactions.append(transaction)
             print("Transaction added")
@@ -56,11 +56,19 @@ class Blockchain:
 
     def mine_pending_transactions(self, miner_address):
         valid_transactions = [tx for tx in self.pending_transactions if tx.is_valid()]
+        
+        # Calculate total fees from transactions
+        total_fees = sum(tx.fee for tx in valid_transactions)
+
+        # Create block and mine
         new_block = Block(len(self.chain), time.time(), valid_transactions, self.get_latest_block().hash)
         new_block.mine_block(self.difficulty)
 
-        # Reward miner
-        reward_tx = Transaction("System", miner_address, 1)
+        # Reward = base + fees
+        reward_amount = 1 + total_fees
+        reward_tx = Transaction("System", miner_address, reward_amount)
+
+        # Reset pending transactions with only the reward
         self.pending_transactions = [reward_tx]
 
         self.chain.append(new_block)
@@ -85,10 +93,11 @@ class Blockchain:
 
 class Transaction:
 
-    def __init__(self, sender, receiver, amount, signature=None, public_key=None):
+    def __init__(self, sender, receiver, amount, fee=0, signature=None, public_key=None):
         self.sender = sender
         self. receiver = receiver
         self.amount = amount
+        self.fee = fee
         self.signature = signature
         self.public_key = public_key
 
@@ -101,7 +110,8 @@ class Transaction:
         data = {
             "sender": self.sender,
             "receiver": self.receiver,
-            "amount": self.amount
+            "amount": self.amount,
+            "fee": self.fee
         }
         if include_signature:
             data[signature] = self.signature
@@ -151,11 +161,11 @@ sender_address = public_key.to_string().hex()
 receiver_address = "receiver1234567890abcdef"  # Example placeholder
 amount = 100
 
-valid_tx = Transaction(sender_address, receiver_address, amount)
+valid_tx = Transaction(sender_address, receiver_address, amount, fee=2)
 valid_tx.sign_transaction(private_key)
 
 # Step 3: Create an invalid transaction (wrong signature)
-invalid_tx = Transaction(sender_address, receiver_address, amount)
+invalid_tx = Transaction(sender_address, receiver_address, amount, fee=5)
 # Manually tamper with data or assign a bad signature
 invalid_tx.signature = "deadbeef" * 16  # clearly invalid hex signature
 
@@ -168,16 +178,18 @@ chain.add_transaction(
     valid_tx.sender,
     valid_tx.receiver,
     valid_tx.amount,
+    valid_tx.fee,
     valid_tx.signature,
     valid_tx.public_key
 )
 
 # Step 6: Add invalid transaction
-print("Adding INVALID transaction...")
+print(f"Adding INVALID transaction...fee is {invalid_tx.fee}")
 chain.add_transaction(
     invalid_tx.sender,
     invalid_tx.receiver,
     invalid_tx.amount,
+    invalid_tx.fee,
     invalid_tx.signature,
     invalid_tx.public_key
 )
