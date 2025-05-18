@@ -69,7 +69,13 @@ class Blockchain:
 
         # Add mining reward transaction to this block
         reward_amount = MINING_REWARD + total_fees
-        reward_tx = Transaction("System", miner_address, reward_amount)
+        reward_tx = Transaction(
+            sender="System",
+            receiver=miner_address,
+            energy_amount=reward_amount,
+            fee=0,
+            price_per_kwh=0)
+
         valid_transactions.append(reward_tx)
 
         # Create new block
@@ -94,23 +100,36 @@ class Blockchain:
 
 
 class Transaction:
-    def __init__(self, sender, receiver, amount, fee=0, signature=None, public_key=None):
+    def __init__(self, sender, receiver, energy_amount=0, price_per_kwh=0, fee=0, reward_amount=0, signature=None, public_key=None, energy_certificate=None):
         self.sender = sender
         self.receiver = receiver
-        self.amount = amount
+        self.energy_amount = energy_amount  # kWh (for energy tx)
+        self.price_per_kwh = price_per_kwh
         self.fee = fee
+        self.reward_amount = reward_amount  # tokens (for mining reward)
         self.signature = signature
         self.public_key = public_key
+        self.energy_certificate = energy_certificate
+
+        # Only calculate total_price if energy_amount > 0
+        self.total_price = self.energy_amount * self.price_per_kwh if self.energy_amount > 0 else 0
 
     def __repr__(self):
-        return f"Transaction({self.sender[:10]}... -> {self.receiver[:10]}...: {self.amount}, fee: {self.fee})"
+        if self.reward_amount > 0:
+            return f"RewardTx(System -> {self.receiver[:10]}..., amount: {self.reward_amount})"
+        else:
+            return f"EnergyTx({self.sender[:10]}... -> {self.receiver[:10]}..., {self.energy_amount}kWh @ {self.price_per_kwh}/kWh, fee: {self.fee})"
 
     def to_dict(self, include_signature=False):
         data = {
             "sender": self.sender,
             "receiver": self.receiver,
-            "amount": self.amount,
-            "fee": self.fee
+            "energy_amount": self.energy_amount,
+            "price_per_kwh": self.price_per_kwh,
+            "total_price": self.total_price,
+            "fee": self.fee,
+            "reward_amount": self.reward_amount,
+            "energy_certificate": self.energy_certificate
         }
         if include_signature:
             data["signature"] = self.signature
@@ -120,27 +139,23 @@ class Transaction:
     def sign_transaction(self, private_key):
         if private_key.get_verifying_key().to_string().hex() != self.sender:
             raise Exception("You cannot sign transactions for other wallets!")
-
         tx_data = json.dumps(self.to_dict(), sort_keys=True).encode()
-        signature_bytes = private_key.sign(tx_data)
-        self.signature = signature_bytes.hex()
+        self.signature = private_key.sign(tx_data).hex()
 
     def is_valid(self):
         if self.sender == "System":
             return True
         if not self.signature:
             return False
-
-        public_key_bytes = bytes.fromhex(self.sender)
-        signature_bytes = bytes.fromhex(self.signature)
-
-        verifying_key = ecdsa.VerifyingKey.from_string(public_key_bytes, curve=ecdsa.SECP256k1)
-
         try:
+            public_key_bytes = bytes.fromhex(self.sender)
+            signature_bytes = bytes.fromhex(self.signature)
+            verifying_key = ecdsa.VerifyingKey.from_string(public_key_bytes, curve=ecdsa.SECP256k1)
             tx_data = json.dumps(self.to_dict(), sort_keys=True).encode()
             return verifying_key.verify(signature_bytes, tx_data)
         except ecdsa.BadSignatureError:
             return False
+
 
 
 # ----- Example usage for testing -----
